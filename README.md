@@ -1,6 +1,6 @@
-# govulnfix
+# vulnfix
 
-`govulnfix` is a CLI that recursively scans a project tree and applies
+`vulnfix` is a CLI that recursively scans a project tree and applies
 ecosystem-specific vulnerability fixes:
 
 - For each directory containing `go.mod`, it runs iterative Go remediation
@@ -26,13 +26,13 @@ ecosystem-specific vulnerability fixes:
 ## Installation
 
 ```sh
-go install github.com/appscodelabs/govulnfix@latest
+go install github.com/appscodelabs/vulnfix@latest
 ```
 
 ## Usage
 
 ```
-govulnfix [flags]
+vulnfix [flags]
 
 Flags:
   --dir string            Root directory to recursively scan for go.mod and package.json (default: current directory)
@@ -53,31 +53,31 @@ Fix Go and npm vulnerabilities under the current tree:
 
 ```sh
 export GITHUB_TOKEN=ghp_...
-govulnfix
+vulnfix
 ```
 
 Target a specific module directory and repository:
 
 ```sh
-govulnfix --dir ./myservice --repo myorg/myservice --github-token ghp_...
+vulnfix --dir ./myservice --repo myorg/myservice --github-token ghp_...
 ```
 
 Run only npm fixes:
 
 ```sh
-govulnfix --go=false --npm=true
+vulnfix --go=false --npm=true
 ```
 
 Run only Go fixes:
 
 ```sh
-govulnfix --go=true --npm=false
+vulnfix --go=true --npm=false
 ```
 
 Preview the planned upgrades without making any changes:
 
 ```sh
-govulnfix --dry-run
+vulnfix --dry-run
 ```
 
 ## GitHub repository detection

@@ -20,7 +20,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/appscodelabs/govulnfix/internal/remediate"
+	"github.com/appscodelabs/vulnfix/internal/remediate"
 
 	"github.com/spf13/cobra"
 )
@@ -33,7 +33,7 @@ func newRootCmd() *cobra.Command {
 	var cfg remediate.Config
 
 	cmd := &cobra.Command{
-		Use:   "govulnfix",
+		Use:   "vulnfix",
 		Short: "Recursively remediate Go and npm vulnerabilities across a project tree",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Stdout = cmd.OutOrStdout()

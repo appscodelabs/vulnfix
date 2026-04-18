@@ -43,9 +43,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            bin/govulnfix-linux-amd64
-            bin/govulnfix-linux-arm64
-            bin/govulnfix-darwin-amd64
-            bin/govulnfix-darwin-arm64
+            bin/vulnfix-linux-amd64
+            bin/vulnfix-linux-arm64
+            bin/vulnfix-darwin-amd64
+            bin/vulnfix-darwin-arm64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,4 +1,4 @@
-module github.com/appscodelabs/govulnfix
+module github.com/appscodelabs/vulnfix
 
 go 1.25.0
 

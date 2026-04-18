@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/appscodelabs/govulnfix/cmd"
+	"github.com/appscodelabs/vulnfix/cmd"
 )
 
 func main() {

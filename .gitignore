@@ -7,7 +7,7 @@
 *.dll
 *.so
 *.dylib
-govulnfix
+vulnfix
 
 # Test binary, built with `go test -c`
 *.test
