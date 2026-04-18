@@ -153,10 +153,10 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	if goEnabled && len(goDirs) == 0 {
-		fmt.Fprintln(stdout, "No go.mod files found; skipping Go remediation.")
+		_, _ = fmt.Fprintln(stdout, "No go.mod files found; skipping Go remediation.")
 	}
 	if npmEnabled && len(npmDirs) == 0 {
-		fmt.Fprintln(stdout, "No package.json files found; skipping npm remediation.")
+		_, _ = fmt.Fprintln(stdout, "No package.json files found; skipping npm remediation.")
 	}
 
 	if (!goEnabled || len(goDirs) == 0) && (!npmEnabled || len(npmDirs) == 0) {
@@ -173,7 +173,7 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 
 		for _, dir := range goDirs {
-			fmt.Fprintf(stdout, "Go remediation in %s\n", dir)
+			_, _ = fmt.Fprintf(stdout, "Go remediation in %s\n", dir)
 			if err := runGoRemediation(ctx, cfg, dir, patterns, owner, name, client, stdout, stderr); err != nil {
 				return err
 			}
@@ -365,11 +365,11 @@ func minDuration(a, b time.Duration) time.Duration {
 	return b
 }
 
-func maxDuration(a, b time.Duration) time.Duration {
-	if a > b {
+func maxDuration(a, _ time.Duration) time.Duration {
+	if a > time.Second {
 		return a
 	}
-	return b
+	return time.Second
 }
 
 func runGoRemediation(
@@ -388,7 +388,7 @@ func runGoRemediation(
 	var lastAlerts []*github.DependabotAlert
 
 	for iteration := 1; iteration <= cfg.MaxIterations; iteration++ {
-		fmt.Fprintf(stdout, "Iteration %d/%d\n", iteration, cfg.MaxIterations)
+		_, _ = fmt.Fprintf(stdout, "Iteration %d/%d\n", iteration, cfg.MaxIterations)
 
 		scan, err := runGovulncheck(ctx, projectDir, patterns)
 		if err != nil {
@@ -404,20 +404,20 @@ func runGoRemediation(
 		targets, unsupported := collectTargets(scan, alerts)
 		reportableTargets := sortTargets(targets)
 
-		fmt.Fprintf(stdout, "  govulncheck vulnerabilities: %d\n", len(scan.UniqueOSVs))
-		fmt.Fprintf(stdout, "  open Dependabot alerts: %d\n", len(alerts))
-		fmt.Fprintf(stdout, "  actionable upgrades: %d\n", len(reportableTargets))
+		_, _ = fmt.Fprintf(stdout, "  govulncheck vulnerabilities: %d\n", len(scan.UniqueOSVs))
+		_, _ = fmt.Fprintf(stdout, "  open Dependabot alerts: %d\n", len(alerts))
+		_, _ = fmt.Fprintf(stdout, "  actionable upgrades: %d\n", len(reportableTargets))
 
 		if len(scan.UniqueOSVs) == 0 && len(alerts) == 0 {
-			fmt.Fprintln(stdout, "All reported vulnerabilities are fixed.")
+			_, _ = fmt.Fprintln(stdout, "All reported vulnerabilities are fixed.")
 			return nil
 		}
 
 		if len(reportableTargets) == 0 {
 			if len(unsupported) > 0 {
-				fmt.Fprintln(stderr, "Unsupported findings:")
+				_, _ = fmt.Fprintln(stderr, "Unsupported findings:")
 				for _, item := range unsupported {
-					fmt.Fprintf(stderr, "  - %s\n", item)
+					_, _ = fmt.Fprintf(stderr, "  - %s\n", item)
 				}
 			}
 			reportRemainingDependabotAlerts(stderr, alerts)
@@ -426,18 +426,18 @@ func runGoRemediation(
 
 		planKey := renderPlanKey(reportableTargets)
 		if planKey == previousPlan {
-			fmt.Fprintln(stdout, "All fixable vulnerabilities have been addressed with the available upgrades.")
+			_, _ = fmt.Fprintln(stdout, "All fixable vulnerabilities have been addressed with the available upgrades.")
 			reportRemainingUnfixable(stdout, stderr, scan, alerts, unsupported)
 			return nil
 		}
 		previousPlan = planKey
 
 		for _, target := range reportableTargets {
-			fmt.Fprintf(stdout, "  - %s\n", describeTarget(target))
+			_, _ = fmt.Fprintf(stdout, "  - %s\n", describeTarget(target))
 		}
 
 		if cfg.DryRun {
-			fmt.Fprintln(stdout, "Dry run complete; no changes were made.")
+			_, _ = fmt.Fprintln(stdout, "Dry run complete; no changes were made.")
 			return nil
 		}
 
@@ -496,9 +496,9 @@ func discoverManifestDirs(root string) ([]string, []string, error) {
 }
 
 func runNPMAuditFix(ctx context.Context, projectDir string, dryRun bool, stdout, stderr io.Writer) error {
-	fmt.Fprintf(stdout, "npm remediation in %s\n", projectDir)
+	_, _ = fmt.Fprintf(stdout, "npm remediation in %s\n", projectDir)
 	if dryRun {
-		fmt.Fprintln(stdout, "  dry-run: would run npm audit fix")
+		_, _ = fmt.Fprintln(stdout, "  dry-run: would run npm audit fix")
 		return nil
 	}
 	return runNPM(ctx, projectDir, stdout, stderr, "audit", "fix")
@@ -506,12 +506,12 @@ func runNPMAuditFix(ctx context.Context, projectDir string, dryRun bool, stdout,
 
 func reportRemainingUnfixable(stdout, stderr io.Writer, scan *govScan, alerts []*github.DependabotAlert, unsupported []string) {
 	if scan != nil && len(scan.UniqueOSVs) > 0 {
-		fmt.Fprintf(stdout, "Unresolved govulncheck vulnerabilities: %d\n", len(scan.UniqueOSVs))
+		_, _ = fmt.Fprintf(stdout, "Unresolved govulncheck vulnerabilities: %d\n", len(scan.UniqueOSVs))
 	}
 	if len(unsupported) > 0 {
-		fmt.Fprintln(stderr, "Unfixable findings:")
+		_, _ = fmt.Fprintln(stderr, "Unfixable findings:")
 		for _, item := range unsupported {
-			fmt.Fprintf(stderr, "  - %s\n", item)
+			_, _ = fmt.Fprintf(stderr, "  - %s\n", item)
 		}
 	}
 	reportRemainingDependabotAlerts(stderr, alerts)
@@ -522,7 +522,7 @@ func reportRemainingDependabotAlerts(w io.Writer, alerts []*github.DependabotAle
 		return
 	}
 
-	fmt.Fprintf(w, "Dependabot alerts still open: %d\n", len(alerts))
+	_, _ = fmt.Fprintf(w, "Dependabot alerts still open: %d\n", len(alerts))
 	for _, alert := range alerts {
 		if alert == nil {
 			continue
@@ -534,7 +534,7 @@ func reportRemainingDependabotAlerts(w io.Writer, alerts []*github.DependabotAle
 		if version == "" {
 			version = "unknown"
 		}
-		fmt.Fprintf(w, "  - %s %s (first patched: %s)\n", alertID, module, version)
+		_, _ = fmt.Fprintf(w, "  - %s %s (first patched: %s)\n", alertID, module, version)
 	}
 }
 
@@ -607,7 +607,7 @@ func listDependabotAlerts(ctx context.Context, client *github.Client, owner, rep
 		if resp == nil || resp.After == "" {
 			break
 		}
-		opts.ListCursorOptions.After = resp.After
+		opts.After = resp.After
 	}
 
 	return all, nil
@@ -773,18 +773,18 @@ func applyTargets(ctx context.Context, projectDir string, targets []*upgradeTarg
 		if target.Kind == targetToolchain {
 			arg = "go@" + target.Version
 		}
-		fmt.Fprintf(stdout, "  applying go get %s\n", arg)
+		_, _ = fmt.Fprintf(stdout, "  applying go get %s\n", arg)
 		if err := runGo(ctx, projectDir, stdout, stderr, "get", arg); err != nil {
 			return err
 		}
 	}
 
-	fmt.Fprintln(stdout, "  running go mod tidy")
+	_, _ = fmt.Fprintln(stdout, "  running go mod tidy")
 	if err := runGo(ctx, projectDir, stdout, stderr, "mod", "tidy"); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(stdout, "  running go mod vendor")
+	_, _ = fmt.Fprintln(stdout, "  running go mod vendor")
 	if err := runGo(ctx, projectDir, stdout, stderr, "mod", "vendor"); err != nil {
 		return err
 	}
