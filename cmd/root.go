@@ -34,7 +34,7 @@ func newRootCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "govulnfix",
-		Short: "Update go.mod until govulncheck and Dependabot Go vulnerabilities are cleared",
+		Short: "Recursively remediate Go and npm vulnerabilities across a project tree",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Stdout = cmd.OutOrStdout()
 			cfg.Stderr = cmd.ErrOrStderr()
@@ -53,6 +53,8 @@ func newRootCmd() *cobra.Command {
 	flags.StringVar(&cfg.GitHubToken, "github-token", "", "GitHub token with security_events or Dependabot alerts read access; defaults to GITHUB_TOKEN")
 	flags.StringSliceVar(&cfg.Patterns, "pattern", []string{"./..."}, "Package patterns passed to govulncheck")
 	flags.IntVar(&cfg.MaxIterations, "max-iterations", 10, "Maximum remediation passes to attempt")
+	flags.BoolVar(&cfg.EnableGo, "go", true, "Enable Go vulnerability remediation for directories containing go.mod")
+	flags.BoolVar(&cfg.EnableNPM, "npm", true, "Enable npm remediation (npm audit fix) for directories containing package.json")
 	flags.BoolVar(&cfg.DryRun, "dry-run", false, "Print the planned module upgrades without changing go.mod")
 
 	return cmd

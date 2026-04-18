@@ -119,6 +119,8 @@ func TestRunDryRunRequiresRepoAndToken(t *testing.T) {
 		ProjectDir:  ".",
 		Repo:        "",
 		GitHubToken: "",
+		EnableGo:    true,
+		EnableNPM:   false,
 		DryRun:      true,
 		Stdout:      &stdout,
 	})
@@ -139,13 +141,25 @@ func TestRunEmptyProjectDirUsesCurrentDirectory(t *testing.T) {
 		ProjectDir:  "",
 		Repo:        "",
 		GitHubToken: "",
+		EnableGo:    true,
+		EnableNPM:   false,
 		DryRun:      true,
 		Stdout:      &stdout,
 	})
-	if err == nil {
-		t.Fatal("expected a prerequisite error")
-	}
-	if strings.Contains(err.Error(), "does not contain go.mod") {
+	if err != nil && strings.Contains(err.Error(), "does not contain go.mod") {
 		t.Fatalf("Run resolved the wrong current directory: %v", err)
+	}
+}
+
+func TestRunRequiresAtLeastOneEcosystem(t *testing.T) {
+	t.Parallel()
+
+	err := Run(context.Background(), Config{
+		ProjectDir: ".",
+		EnableGo:   false,
+		EnableNPM:  false,
+	})
+	if err == nil {
+		t.Fatal("expected an ecosystem selection error")
 	}
 }

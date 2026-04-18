@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -55,6 +56,8 @@ type Config struct {
 	GitHubToken   string
 	Patterns      []string
 	MaxIterations int
+	EnableGo      bool
+	EnableNPM     bool
 	DryRun        bool
 	Stdout        io.Writer
 	Stderr        io.Writer
@@ -111,6 +114,12 @@ func Run(ctx context.Context, cfg Config) error {
 		stderr = os.Stderr
 	}
 
+	goEnabled := cfg.EnableGo
+	npmEnabled := cfg.EnableNPM
+	if !goEnabled && !npmEnabled {
+		return errors.New("at least one ecosystem must be enabled via --go or --npm")
+	}
+
 	projectDirValue := strings.TrimSpace(cfg.ProjectDir)
 	if projectDirValue == "" {
 		projectDirValue = "."
@@ -119,9 +128,6 @@ func Run(ctx context.Context, cfg Config) error {
 	projectDir, err := filepath.Abs(projectDirValue)
 	if err != nil {
 		return fmt.Errorf("resolve project directory: %w", err)
-	}
-	if err := ensureModuleDir(projectDir); err != nil {
-		return err
 	}
 
 	patterns := cfg.Patterns
@@ -132,22 +138,69 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.MaxIterations = 10
 	}
 
+	goDirs, npmDirs, err := discoverManifestDirs(projectDir)
+	if err != nil {
+		return err
+	}
+
+	if goEnabled && len(goDirs) == 0 {
+		fmt.Fprintln(stdout, "No go.mod files found; skipping Go remediation.")
+	}
+	if npmEnabled && len(npmDirs) == 0 {
+		fmt.Fprintln(stdout, "No package.json files found; skipping npm remediation.")
+	}
+
+	if (!goEnabled || len(goDirs) == 0) && (!npmEnabled || len(npmDirs) == 0) {
+		return fmt.Errorf("no supported manifests found under %s", projectDir)
+	}
+
+	var owner string
+	var name string
+	var client *github.Client
+	if goEnabled && len(goDirs) > 0 {
+		owner, name, client, err = resolveGitHubClient(ctx, cfg, projectDir)
+		if err != nil {
+			return err
+		}
+
+		for _, dir := range goDirs {
+			fmt.Fprintf(stdout, "Go remediation in %s\n", dir)
+			if err := runGoRemediation(ctx, cfg, dir, patterns, owner, name, client, stdout, stderr); err != nil {
+				return err
+			}
+		}
+	}
+
+	if npmEnabled {
+		for _, dir := range npmDirs {
+			if err := runNPMAuditFix(ctx, dir, cfg.DryRun, stdout, stderr); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func resolveGitHubClient(ctx context.Context, cfg Config, projectDir string) (string, string, *github.Client, error) {
 	repo := strings.TrimSpace(cfg.Repo)
 	if repo == "" {
 		repo = strings.TrimSpace(os.Getenv("GITHUB_REPOSITORY"))
 	}
 	if repo == "" {
+		var err error
 		repo, err = detectRepoFromGit(ctx, projectDir)
 		if err != nil && !errors.Is(err, errNoRepoInfo) {
-			return err
+			return "", "", nil, err
 		}
 	}
 	if repo == "" {
-		return errNoRepoInfo
+		return "", "", nil, errNoRepoInfo
 	}
+
 	owner, name, err := splitRepo(repo)
 	if err != nil {
-		return err
+		return "", "", nil, err
 	}
 
 	token := strings.TrimSpace(cfg.GitHubToken)
@@ -158,10 +211,25 @@ func Run(ctx context.Context, cfg Config) error {
 		token = strings.TrimSpace(os.Getenv(envVar))
 	}
 	if token == "" {
-		return errNoGitHubPAT
+		return "", "", nil, errNoGitHubPAT
 	}
 
 	client := github.NewClient(&http.Client{}).WithAuthToken(token)
+	return owner, name, client, nil
+}
+
+func runGoRemediation(
+	ctx context.Context,
+	cfg Config,
+	projectDir string,
+	patterns []string,
+	owner, name string,
+	client *github.Client,
+	stdout, stderr io.Writer,
+) error {
+	if err := ensureModuleDir(projectDir); err != nil {
+		return err
+	}
 	previousPlan := ""
 	var lastAlerts []*github.DependabotAlert
 
@@ -226,6 +294,60 @@ func Run(ctx context.Context, cfg Config) error {
 
 	reportRemainingDependabotAlerts(stderr, lastAlerts)
 	return fmt.Errorf("reached max iterations (%d) before vulnerabilities were cleared", cfg.MaxIterations)
+}
+
+func discoverManifestDirs(root string) ([]string, []string, error) {
+	goSet := make(map[string]struct{})
+	npmSet := make(map[string]struct{})
+
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", "node_modules", "vendor":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		dir := filepath.Dir(path)
+		switch d.Name() {
+		case "go.mod":
+			goSet[dir] = struct{}{}
+		case "package.json":
+			npmSet[dir] = struct{}{}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("discover manifests under %s: %w", root, err)
+	}
+
+	goDirs := make([]string, 0, len(goSet))
+	for dir := range goSet {
+		goDirs = append(goDirs, dir)
+	}
+	npmDirs := make([]string, 0, len(npmSet))
+	for dir := range npmSet {
+		npmDirs = append(npmDirs, dir)
+	}
+
+	sort.Strings(goDirs)
+	sort.Strings(npmDirs)
+	return goDirs, npmDirs, nil
+}
+
+func runNPMAuditFix(ctx context.Context, projectDir string, dryRun bool, stdout, stderr io.Writer) error {
+	fmt.Fprintf(stdout, "npm remediation in %s\n", projectDir)
+	if dryRun {
+		fmt.Fprintln(stdout, "  dry-run: would run npm audit fix")
+		return nil
+	}
+	return runNPM(ctx, projectDir, stdout, stderr, "audit", "fix")
 }
 
 func reportRemainingUnfixable(stdout, stderr io.Writer, scan *govScan, alerts []*github.DependabotAlert, unsupported []string) {
@@ -526,6 +648,20 @@ func runGo(ctx context.Context, projectDir string, stdout, stderr io.Writer, arg
 			return errors.New("go executable was not found on PATH")
 		}
 		return fmt.Errorf("go %s failed: %w", strings.Join(args, " "), err)
+	}
+	return nil
+}
+
+func runNPM(ctx context.Context, projectDir string, stdout, stderr io.Writer, args ...string) error {
+	cmd := exec.CommandContext(ctx, "npm", args...)
+	cmd.Dir = projectDir
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	if err := cmd.Run(); err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return errors.New("npm executable was not found on PATH")
+		}
+		return fmt.Errorf("npm %s failed: %w", strings.Join(args, " "), err)
 	}
 	return nil
 }
