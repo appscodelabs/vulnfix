@@ -24,22 +24,31 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/v84/github"
 	"golang.org/x/mod/semver"
+	"golang.org/x/oauth2"
 )
 
 const (
 	stdlibModule    = "stdlib"
 	toolchainModule = "toolchain"
 	maxPerPage      = 100
+
+	defaultSecondaryRetryDelay = time.Minute
+	defaultServerErrorDelay    = 5 * time.Second
+	maxSecondaryRetryDelay     = 15 * time.Minute
+	maxRateLimitRetryAttempts  = 8
 )
 
 var (
@@ -214,8 +223,153 @@ func resolveGitHubClient(ctx context.Context, cfg Config, projectDir string) (st
 		return "", "", nil, errNoGitHubPAT
 	}
 
-	client := github.NewClient(&http.Client{}).WithAuthToken(token)
+	client := newGitHubClient(ctx, token)
 	return owner, name, client, nil
+}
+
+func newGitHubClient(ctx context.Context, token string) *github.Client {
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
+	httpClient := oauth2.NewClient(ctx, ts)
+
+	baseTransport := httpClient.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	httpClient.Transport = &rateLimitTransport{base: baseTransport}
+
+	return github.NewClient(httpClient)
+}
+
+type rateLimitTransport struct {
+	base http.RoundTripper
+}
+
+func (t *rateLimitTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	canRetryBody := req.Body == nil || req.Body == http.NoBody || req.GetBody != nil
+
+	for attempt := 0; ; attempt++ {
+		currReq := req
+		if attempt > 0 {
+			currReq = req.Clone(req.Context())
+			if req.GetBody != nil {
+				body, err := req.GetBody()
+				if err != nil {
+					return nil, err
+				}
+				currReq.Body = body
+			}
+		}
+
+		resp, err := t.base.RoundTrip(currReq)
+		if err != nil {
+			return nil, err
+		}
+		if resp == nil {
+			return nil, nil
+		}
+
+		retryable := resp.StatusCode == http.StatusForbidden ||
+			resp.StatusCode == http.StatusTooManyRequests ||
+			resp.StatusCode == http.StatusInternalServerError
+		if !retryable {
+			return resp, nil
+		}
+		if attempt >= maxRateLimitRetryAttempts || !canRetryBody {
+			return resp, nil
+		}
+
+		delay := retryDelay(resp, attempt)
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-req.Context().Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return nil, req.Context().Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func retryDelay(resp *http.Response, attempt int) time.Duration {
+	if resp.StatusCode == http.StatusInternalServerError {
+		backoff := minDuration(
+			time.Duration(float64(defaultServerErrorDelay)*math.Pow(2, float64(attempt))),
+			maxSecondaryRetryDelay,
+		)
+		return maxDuration(backoff, time.Second)
+	}
+
+	return rateLimitRetryDelay(resp, attempt)
+}
+
+func rateLimitRetryDelay(resp *http.Response, secondaryAttempt int) time.Duration {
+	retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+	if retryAfter > 0 {
+		return retryAfter
+	}
+
+	if resp.Header.Get("X-RateLimit-Remaining") == "0" {
+		if reset := parseUnixTime(resp.Header.Get("X-RateLimit-Reset")); !reset.IsZero() {
+			return maxDuration(time.Until(reset)+time.Second, time.Second)
+		}
+	}
+
+	backoff := minDuration(
+		time.Duration(float64(defaultSecondaryRetryDelay)*math.Pow(2, float64(secondaryAttempt))),
+		maxSecondaryRetryDelay,
+	)
+	return maxDuration(backoff, time.Second)
+}
+
+func parseRetryAfter(value string) time.Duration {
+	if value == "" {
+		return 0
+	}
+
+	seconds, err := strconv.Atoi(value)
+	if err == nil {
+		if seconds < 1 {
+			seconds = 1
+		}
+		return time.Duration(seconds) * time.Second
+	}
+
+	if ts, err := http.ParseTime(value); err == nil {
+		return maxDuration(time.Until(ts), time.Second)
+	}
+
+	return 0
+}
+
+func parseUnixTime(value string) time.Time {
+	if value == "" {
+		return time.Time{}
+	}
+
+	sec, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return time.Time{}
+	}
+
+	return time.Unix(sec, 0).UTC()
+}
+
+func minDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxDuration(a, b time.Duration) time.Duration {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func runGoRemediation(
