@@ -22,7 +22,7 @@ func TestGoCheckFlagsDefaultEnabled(t *testing.T) {
 	t.Parallel()
 
 	cmd := newRootCmd()
-	for _, name := range []string{"govulncheck", "dependabot"} {
+	for _, name := range []string{"go-vulncheck", "go-dependabot"} {
 		t.Run(name, func(t *testing.T) {
 			flag := cmd.Flags().Lookup(name)
 			if flag == nil {

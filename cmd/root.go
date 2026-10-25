@@ -55,8 +55,8 @@ func newRootCmd() *cobra.Command {
 	flags.IntVar(&cfg.MaxIterations, "max-iterations", 10, "Maximum remediation passes to attempt")
 	flags.BoolVar(&cfg.EnableGo, "go", true, "Enable Go vulnerability remediation for directories containing go.mod")
 	flags.BoolVar(&cfg.EnableNPM, "npm", true, "Enable npm remediation (npm audit fix) for directories containing package.json")
-	flags.BoolVar(&cfg.EnableGovulncheck, "govulncheck", true, "Enable govulncheck vulnerability checks for Go modules")
-	flags.BoolVar(&cfg.EnableDependabot, "dependabot", true, "Enable GitHub Dependabot alert checks for Go modules")
+	flags.BoolVar(&cfg.EnableGovulncheck, "go-vulncheck", true, "Enable govulncheck vulnerability checks for Go modules")
+	flags.BoolVar(&cfg.EnableDependabot, "go-dependabot", true, "Enable GitHub Dependabot alert checks for Go modules")
 	flags.BoolVar(&cfg.DryRun, "dry-run", false, "Print the planned module upgrades without changing go.mod")
 
 	return cmd

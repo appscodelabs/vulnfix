@@ -16,14 +16,14 @@ ecosystem-specific vulnerability fixes:
 3. For each npm package directory:
   Runs `npm audit fix`.
 4. Honors `--go` and `--npm` toggles to enable or disable ecosystems, and
-   `--govulncheck` and `--dependabot` to choose which Go vulnerability sources
+   `--go-vulncheck` and `--go-dependabot` to choose which Go vulnerability sources
    to check.
 
 ## Prerequisites
 
-- Go toolchain with `govulncheck` installed (`go install golang.org/x/vuln/cmd/govulncheck@latest`) when `--go=true --govulncheck=true`
+- Go toolchain with `govulncheck` installed (`go install golang.org/x/vuln/cmd/govulncheck@latest`) when `--go=true --go-vulncheck=true`
 - Node.js and npm when `--npm=true`
-- A GitHub personal access token (or fine-grained token) with **read** access to Dependabot alerts (`security_events` scope for classic tokens) when `--go=true --dependabot=true`
+- A GitHub personal access token (or fine-grained token) with **read** access to Dependabot alerts (`security_events` scope for classic tokens) when `--go=true --go-dependabot=true`
 
 ## Installation
 
@@ -40,8 +40,8 @@ Flags:
   --dir string            Root directory to recursively scan for go.mod and package.json (default: current directory)
   --go                    Enable Go vulnerability remediation (default: true)
   --npm                   Enable npm remediation via npm audit fix (default: true)
-  --govulncheck           Enable govulncheck vulnerability checks (default: true)
-  --dependabot            Enable Dependabot alert checks for Go (default: true)
+  --go-vulncheck          Enable govulncheck vulnerability checks (default: true)
+  --go-dependabot         Enable Dependabot alert checks for Go (default: true)
   --repo string           GitHub repository in owner/repo form
                           (defaults to GITHUB_REPOSITORY env var or the origin remote)
   --github-token string   GitHub token for Dependabot alerts
@@ -81,13 +81,13 @@ vulnfix --go=true --npm=false
 Run Go checks without Dependabot:
 
 ```sh
-vulnfix --dependabot=false
+vulnfix --go-dependabot=false
 ```
 
 Run Go checks without govulncheck:
 
 ```sh
-vulnfix --govulncheck=false
+vulnfix --go-vulncheck=false
 ```
 
 Preview the planned upgrades without making any changes:
