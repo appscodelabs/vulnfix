@@ -60,16 +60,18 @@ var (
 )
 
 type Config struct {
-	ProjectDir    string
-	Repo          string
-	GitHubToken   string
-	Patterns      []string
-	MaxIterations int
-	EnableGo      bool
-	EnableNPM     bool
-	DryRun        bool
-	Stdout        io.Writer
-	Stderr        io.Writer
+	ProjectDir        string
+	Repo              string
+	GitHubToken       string
+	Patterns          []string
+	MaxIterations     int
+	EnableGo          bool
+	EnableNPM         bool
+	EnableGovulncheck bool
+	EnableDependabot  bool
+	DryRun            bool
+	Stdout            io.Writer
+	Stderr            io.Writer
 }
 
 type govulncheckMessage struct {
@@ -166,18 +168,21 @@ func Run(ctx context.Context, cfg Config) error {
 	var owner string
 	var name string
 	var client *github.Client
-	if goEnabled && len(goDirs) > 0 {
-		owner, name, client, err = resolveGitHubClient(ctx, cfg, projectDir)
-		if err != nil {
-			return err
+	if goEnabled && len(goDirs) > 0 && (cfg.EnableGovulncheck || cfg.EnableDependabot) {
+		if cfg.EnableDependabot {
+			owner, name, client, err = resolveGitHubClient(ctx, cfg, projectDir)
+			if err != nil {
+				return err
+			}
 		}
-
 		for _, dir := range goDirs {
 			_, _ = fmt.Fprintf(stdout, "Go remediation in %s\n", dir)
 			if err := runGoRemediation(ctx, cfg, dir, patterns, owner, name, client, stdout, stderr); err != nil {
 				return err
 			}
 		}
+	} else if goEnabled && len(goDirs) > 0 {
+		_, _ = fmt.Fprintln(stdout, "Go remediation skipped; both govulncheck and Dependabot checks are disabled.")
 	}
 
 	if npmEnabled {
@@ -390,14 +395,22 @@ func runGoRemediation(
 	for iteration := 1; iteration <= cfg.MaxIterations; iteration++ {
 		_, _ = fmt.Fprintf(stdout, "Iteration %d/%d\n", iteration, cfg.MaxIterations)
 
-		scan, err := runGovulncheck(ctx, projectDir, patterns)
-		if err != nil {
-			return err
+		scan := &govScan{UniqueOSVs: make(map[string]struct{})}
+		if cfg.EnableGovulncheck {
+			var err error
+			scan, err = runGovulncheck(ctx, projectDir, patterns)
+			if err != nil {
+				return err
+			}
 		}
 
-		alerts, err := listDependabotAlerts(ctx, client, owner, name)
-		if err != nil {
-			return err
+		var alerts []*github.DependabotAlert
+		if cfg.EnableDependabot {
+			var err error
+			alerts, err = listDependabotAlerts(ctx, client, owner, name)
+			if err != nil {
+				return err
+			}
 		}
 		lastAlerts = alerts
 

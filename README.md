@@ -15,13 +15,15 @@ ecosystem-specific vulnerability fixes:
   applies `go get` upgrades, then runs `go mod tidy` and `go mod vendor`.
 3. For each npm package directory:
   Runs `npm audit fix`.
-4. Honors `--go` and `--npm` toggles to enable or disable ecosystems.
+4. Honors `--go` and `--npm` toggles to enable or disable ecosystems, and
+   `--govulncheck` and `--dependabot` to choose which Go vulnerability sources
+   to check.
 
 ## Prerequisites
 
-- Go toolchain with `govulncheck` installed (`go install golang.org/x/vuln/cmd/govulncheck@latest`) when `--go=true`
+- Go toolchain with `govulncheck` installed (`go install golang.org/x/vuln/cmd/govulncheck@latest`) when `--go=true --govulncheck=true`
 - Node.js and npm when `--npm=true`
-- A GitHub personal access token (or fine-grained token) with **read** access to Dependabot alerts (`security_events` scope for classic tokens) when `--go=true`
+- A GitHub personal access token (or fine-grained token) with **read** access to Dependabot alerts (`security_events` scope for classic tokens) when `--go=true --dependabot=true`
 
 ## Installation
 
@@ -38,6 +40,8 @@ Flags:
   --dir string            Root directory to recursively scan for go.mod and package.json (default: current directory)
   --go                    Enable Go vulnerability remediation (default: true)
   --npm                   Enable npm remediation via npm audit fix (default: true)
+  --govulncheck           Enable govulncheck vulnerability checks (default: true)
+  --dependabot            Enable Dependabot alert checks for Go (default: true)
   --repo string           GitHub repository in owner/repo form
                           (defaults to GITHUB_REPOSITORY env var or the origin remote)
   --github-token string   GitHub token for Dependabot alerts
@@ -72,6 +76,18 @@ Run only Go fixes:
 
 ```sh
 vulnfix --go=true --npm=false
+```
+
+Run Go checks without Dependabot:
+
+```sh
+vulnfix --dependabot=false
+```
+
+Run Go checks without govulncheck:
+
+```sh
+vulnfix --govulncheck=false
 ```
 
 Preview the planned upgrades without making any changes:

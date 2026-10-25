@@ -118,13 +118,14 @@ func TestRunDryRunRequiresRepoAndToken(t *testing.T) {
 
 	var stdout bytes.Buffer
 	err := Run(context.Background(), Config{
-		ProjectDir:  ".",
-		Repo:        "",
-		GitHubToken: "",
-		EnableGo:    true,
-		EnableNPM:   false,
-		DryRun:      true,
-		Stdout:      &stdout,
+		ProjectDir:       ".",
+		Repo:             "",
+		GitHubToken:      "",
+		EnableGo:         true,
+		EnableNPM:        false,
+		EnableDependabot: true,
+		DryRun:           true,
+		Stdout:           &stdout,
 	})
 	if err == nil {
 		t.Fatal("expected error when repo and token are missing")
